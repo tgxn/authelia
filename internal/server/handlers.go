@@ -1,7 +1,9 @@
 package server
 
 import (
+	"crypto/tls"
 	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -212,17 +214,16 @@ func handleRouter(config schema.Configuration, providers middlewares.Providers) 
 	// Configure DUO api endpoint only if configuration exists.
 	if !config.DuoAPI.Disable {
 		var duoAPI duo.API
-		if os.Getenv("ENVIRONMENT") == dev {
-			duoAPI = duo.NewDuoAPI(duoapi.NewDuoApi(
-				config.DuoAPI.IntegrationKey,
-				config.DuoAPI.SecretKey,
-				config.DuoAPI.Hostname, "", duoapi.SetInsecure()))
-		} else {
-			duoAPI = duo.NewDuoAPI(duoapi.NewDuoApi(
-				config.DuoAPI.IntegrationKey,
-				config.DuoAPI.SecretKey,
-				config.DuoAPI.Hostname, ""))
-		}
+
+		// configure Duo transport according to options.
+		transport := createDuoTransport(config)
+
+		duoAPI = duo.NewDuoAPI(duoapi.NewDuoApi(
+			config.DuoAPI.IntegrationKey,
+			config.DuoAPI.SecretKey,
+			config.DuoAPI.Hostname,
+			"authelia",
+			duoapi.SetTransport(transport)))
 
 		r.GET("/api/secondfactor/duo_devices", middleware1FA(handlers.DuoDevicesGET(duoAPI)))
 		r.POST("/api/secondfactor/duo", middleware1FA(handlers.DuoPOST(duoAPI)))
@@ -337,6 +338,18 @@ func handleRouter(config schema.Configuration, providers middlewares.Providers) 
 	handler = middlewares.Wrap(middlewares.NewMetricsRequest(providers.Metrics), handler)
 
 	return handler
+}
+
+func createDuoTransport(config schema.Configuration) func(tr *http.Transport) {
+	return func(tr *http.Transport) {
+		if config.DuoAPI.UseSystemRootCAs {
+			tr.TLSClientConfig = new(tls.Config)
+		}
+
+		if os.Getenv("ENVIRONMENT") == dev {
+			tr.TLSClientConfig.InsecureSkipVerify = true
+		}
+	}
 }
 
 func handleMetrics() fasthttp.RequestHandler {

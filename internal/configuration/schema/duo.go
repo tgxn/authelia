@@ -7,4 +7,5 @@ type DuoAPIConfiguration struct {
 	IntegrationKey       string `koanf:"integration_key"`
 	SecretKey            string `koanf:"secret_key"`
 	EnableSelfEnrollment bool   `koanf:"enable_self_enrollment"`
+	UseSystemRootCAs     bool   `koanf:"use_system_cas"`
 }
